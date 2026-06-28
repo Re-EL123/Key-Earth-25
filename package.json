@@ -1,0 +1,45 @@
+{
+  "name": "green-world-platform-backend",
+  "version": "1.0.0",
+  "description": "Complete backend API for the Green World distribution, e-commerce, appointment booking, and delivery management platform.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:endpoints": "node scripts/testEndpoints.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ground-Up-Grinders/Green-World-Platform-Backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ground-Up-Grinders/Green-World-Platform-Backend/issues"
+  },
+  "homepage": "https://github.com/Ground-Up-Grinders/Green-World-Platform-Backend#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "csv-parser": "^3.2.1",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "firebase-admin": "^13.10.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.2",
+    "multer": "^2.1.1",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.7",
+    "pdfkit": "^0.18.0",
+    "slugify": "^1.6.9"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
