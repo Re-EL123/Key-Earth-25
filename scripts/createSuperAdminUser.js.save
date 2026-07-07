@@ -1,0 +1,97 @@
+// scripts/createSuperAdminUser.js
+
+require('dotenv').config();
+
+const mongoose = require('mongoose');
+
+const User = require('../src/models/User'); // adjust path if needed
+
+
+
+async function main() {
+
+  try {
+
+    await mongoose.connect(process.env.MONGODB_URI);
+
+    console.log('Connected to MongoDB');
+
+
+
+    // TODO: replace with the real Firebase UID from Firebase Auth
+
+    const firebaseUid = 'rKYvmsprNZM57kBXCYDuN15sN6p2';
+
+
+
+    const email = 'akanishibiri@protonmail.com';
+
+    const name = 'Super Admin';
+
+    const phone = '+27 813864024'; // use a real phone if you like
+
+
+
+    let user = await User.findOne({ firebaseUid });
+
+    if (user) {
+
+      console.log('User with this firebaseUid already exists:', user.email);
+
+      process.exit(0);
+
+    }
+
+
+
+    user = await User.create({
+
+      firebaseUid,
+
+      email,
+
+      role: 'superAdmin', // from enum in your schema
+
+      name,
+
+      phone,
+
+      verificationStatus: 'verified',
+
+      isActive: true,
+
+      metadata: {
+
+        createdBy: 'seed-script',
+
+      },
+
+    });
+
+
+
+    console.log('Super admin user created:');
+
+    console.log('Firebase UID:', firebaseUid);
+
+    console.log('Email:', email);
+
+    console.log('Role:', user.role);
+
+
+
+    process.exit(0);
+
+  } catch (err) {
+
+    console.error('Error creating super admin user:', err);
+
+    process.exit(1);
+
+  }
+
+}
+
+
+
+main();
