@@ -35,7 +35,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     Order.countDocuments(),
     Driver.countDocuments(),
     Store.countDocuments({ isActive: true, subscriptionStatus: 'active' }),
-    User.countDocuments({ verificationStatus: 'pending', role: 'distributor' }),
+    User.countDocuments({ verificationStatus: 'pending', role: { $in: ['distributor', 'storeOwner'] } }),
   ]);
 
   // Revenue statistics
@@ -151,7 +151,7 @@ const getUserDetails = asyncHandler(async (req, res) => {
 });
 
 /**
- * Verify/Reject distributor
+ * Verify/Reject distributor or store owner
  * @route PUT /api/admin/distributors/:id/verify
  * @access Private (Super Admin)
  */
@@ -167,10 +167,11 @@ const verifyDistributor = asyncHandler(async (req, res) => {
     });
   }
 
-  if(user.role === 'storeOwner' || user.role === 'distributor') {
+  // Only allow verification for distributor or store owner
+  if (user.role !== 'storeOwner' && user.role !== 'distributor') {
     return res.status(400).json({
       success: false,
-      message: 'User is not a distributor/store owner',
+      message: 'User is not a distributor or store owner',
     });
   }
 
@@ -182,12 +183,12 @@ const verifyDistributor = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  // Send email notification
+  // Send email notification (can be generic for both roles)
   await sendDistributorVerificationEmail(user, status);
 
   res.json({
     success: true,
-    message: `Distributor ${status} successfully`,
+    message: `Distributor/store owner ${status} successfully`,
     data: { user },
   });
 });
@@ -408,16 +409,22 @@ const getAllDrivers = asyncHandler(async (req, res) => {
   // Filter by search if provided
   let filteredDrivers = drivers;
   if (search) {
-    filteredDrivers = drivers.filter(driver => 
-      driver.userId?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      driver.vehicleNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      driver.licenseNumber?.toLowerCase().includes(search.toLowerCase())
+    filteredDrivers = drivers.filter(
+      (driver) =>
+        driver.userId?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        driver.vehicleNumber?.toLowerCase().includes(search.toLowerCase()) ||
+        driver.licenseNumber?.toLowerCase().includes(search.toLowerCase())
     );
   }
 
   res.json({
     success: true,
-    ...formatPaginationResponse(filteredDrivers, search ? filteredDrivers.length : total, pageNum, pageLimit),
+    ...formatPaginationResponse(
+      filteredDrivers,
+      search ? filteredDrivers.length : total,
+      pageNum,
+      pageLimit
+    ),
   });
 });
 
