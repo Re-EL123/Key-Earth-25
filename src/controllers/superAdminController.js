@@ -1,564 +1,313 @@
 const User = require('../models/User');
+
 const DistributorCode = require('../models/DistributorCode');
+
 const Store = require('../models/Store');
+
 const Product = require('../models/Product');
+
 const Order = require('../models/Order');
+
 const Driver = require('../models/Driver');
+
 const Subscription = require('../models/Subscription');
+
 const { asyncHandler } = require('../middleware/errorMiddleware');
+
 const { getPagination, formatPaginationResponse } = require('../utils/helpers');
+
 const { sendDistributorVerificationEmail, sendDriverApprovalEmail } = require('../utils/emailService');
+
 const csv = require('csv-parser');
+
 const fs = require('fs');
 
+
+
 /**
+
  * Get dashboard statistics
+
  * @route GET /api/admin/dashboard
+
  * @access Private (Super Admin)
+
  */
+
 const getDashboardStats = asyncHandler(async (req, res) => {
-  // Count statistics
+
   const [
+
     totalUsers,
+
     totalDistributors,
+
     totalStores,
+
     totalProducts,
+
     totalOrders,
+
     totalDrivers,
+
     activeStores,
+
     pendingVerifications,
+
   ] = await Promise.all([
+
     User.countDocuments(),
+
     User.countDocuments({ role: { $in: ['distributor', 'storeOwner'] } }),
+
     Store.countDocuments(),
+
     Product.countDocuments(),
+
     Order.countDocuments(),
+
     Driver.countDocuments(),
+
     Store.countDocuments({ isActive: true, subscriptionStatus: 'active' }),
-<<<<<<< HEAD
-<<<<<<< HEAD
-    User.countDocuments({ verificationStatus: 'pending', role: 'storeOwner' }),
-=======
+
     User.countDocuments({ verificationStatus: 'pending', role: { $in: ['distributor', 'storeOwner'] } }),
->>>>>>> a28b25959fc3c8e44c0d1c6b0b022d28bff4d474
-=======
-    User.countDocuments({ verificationStatus: 'pending', role: 'distributor' }),
->>>>>>> parent of 6a58001 (fix admin conroller)
+
   ]);
 
-  // Revenue statistics
+
+
   const revenueStats = await Order.aggregate([
+
     { $match: { paymentStatus: 'paid' } },
+
     {
+
       $group: {
+
         _id: null,
+
         totalRevenue: { $sum: '$total' },
+
         totalDeliveryFees: { $sum: '$deliveryFee' },
+
       },
+
     },
+
   ]);
 
-  // Recent orders
+
+
   const recentOrders = await Order.find()
+
     .sort({ createdAt: -1 })
+
     .limit(10)
+
     .populate('customerId', 'name email')
+
     .populate('storeId', 'name');
 
+
+
   res.json({
+
     success: true,
+
     data: {
+
       statistics: {
+
         totalUsers,
+
         totalDistributors,
+
         totalStores,
+
         totalProducts,
+
         totalOrders,
+
         totalDrivers,
+
         activeStores,
+
         pendingVerifications,
+
         totalRevenue: revenueStats[0]?.totalRevenue || 0,
+
         totalDeliveryFees: revenueStats[0]?.totalDeliveryFees || 0,
+
       },
+
       recentOrders,
+
     },
+
   });
+
 });
 
+
+
 /**
+
  * Get all users with filters
+
  * @route GET /api/admin/users
+
  * @access Private (Super Admin)
+
  */
+
 const getAllUsers = asyncHandler(async (req, res) => {
+
   const { page, limit, role, verificationStatus, search } = req.query;
+
   const { skip, limit: pageLimit, page: pageNum } = getPagination(page, limit);
+
+
 
   const query = {};
 
+
+
   if (role) query.role = role;
+
   if (verificationStatus) query.verificationStatus = verificationStatus;
+
   if (search) {
+
     query.$or = [
+
       { name: { $regex: search, $options: 'i' } },
+
       { email: { $regex: search, $options: 'i' } },
+
       { phone: { $regex: search, $options: 'i' } },
+
     ];
+
   }
+
+
 
   const [users, total] = await Promise.all([
+
     User.find(query)
+
       .skip(skip)
+
       .limit(pageLimit)
+
       .sort({ createdAt: -1 }),
+
     User.countDocuments(query),
+
   ]);
 
+
+
   res.json({
+
     success: true,
+
     ...formatPaginationResponse(users, total, pageNum, pageLimit),
+
   });
+
 });
 
+
+
 /**
+
  * Get single user details
+
  * @route GET /api/admin/users/:id
+
  * @access Private (Super Admin)
+
  */
+
 const getUserDetails = asyncHandler(async (req, res) => {
+
   const user = await User.findById(req.params.id);
 
+
+
   if (!user) {
+
     return res.status(404).json({
+
       success: false,
+
       message: 'User not found',
+
     });
+
   }
 
-  // Get additional data based on role
+
+
   let additionalData = {};
 
+
+
   if (user.role === 'driver') {
+
     additionalData.driverProfile = await Driver.findByUserId(user._id);
+
   }
+
+
 
   if (user.role === 'storeOwner' || user.role === 'distributor') {
+
     additionalData.stores = await Store.findByDistributor(user._id);
+
     additionalData.orders = await Order.find({ customerId: user._id })
+
       .sort({ createdAt: -1 })
+
       .limit(10);
+
   }
 
+
+
   res.json({
+
     success: true,
+
     data: {
+
       user,
+
       ...additionalData,
+
     },
+
   });
+
 });
 
+
+
 /**
+
  * Verify/Reject distributor or store owner
+
  * @route PUT /api/admin/distributors/:id/verify
+
  * @access Private (Super Admin)
+
  */
+
 const verifyDistributor = asyncHandler(async (req, res) => {
+
   const { status, reason } = req.body; // status: 'verified' or 'rejected'
 
-  const user = await User.findById(req.params.id);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: 'User not found',
-    });
-  }
-
-  // Only allow verification for distributor or store owner
-  if (user.role !== 'storeOwner' && user.role !== 'distributor') {
-    return res.status(400).json({
-      success: false,
-      message: 'User is not a distributor or store owner',
-    });
-  }
-
-  user.verificationStatus = status;
-  if (status === 'rejected' && reason) {
-    user.metadata = user.metadata || new Map();
-    user.metadata.set('rejectionReason', reason);
-  }
-
-  await user.save();
-
-  // Send email notification (can be generic for both roles)
-  await sendDistributorVerificationEmail(user, status);
-
-  res.json({
-    success: true,
-    message: `Distributor/store owner ${status} successfully`,
-    data: { user },
-  });
-});
-
-/**
- * Upload distributor codes from CSV
- * @route POST /api/admin/distributor-codes/upload
- * @access Private (Super Admin)
- */
-const uploadDistributorCodes = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({
-      success: false,
-      message: 'CSV file is required',
-    });
-  }
-
-  const codes = [];
-  const errors = [];
-
-  // Parse CSV file
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (row) => {
-      if (row.code) {
-        codes.push({
-          code: row.code.toUpperCase().trim(),
-          distributorName: row.name?.trim(),
-          distributorEmail: row.email?.trim(),
-          distributorPhone: row.phone?.trim(),
-        });
-      }
-    })
-    .on('end', async () => {
-      try {
-        // Bulk insert codes
-        const result = await DistributorCode.bulkCreate(codes, req.user._id);
-
-        // Delete uploaded file
-        fs.unlinkSync(req.file.path);
-
-        res.json({
-          success: true,
-          message: `${result.length} distributor codes uploaded successfully`,
-          data: {
-            uploaded: result.length,
-            total: codes.length,
-            failed: codes.length - result.length,
-          },
-        });
-      } catch (error) {
-        // Delete uploaded file
-const User = require('../models/User');
-
-const DistributorCode = require('../models/DistributorCode');
-
-const Store = require('../models/Store');
-
-const Product = require('../models/Product');
-
-const Order = require('../models/Order');
-
-const Driver = require('../models/Driver');
-
-const Subscription = require('../models/Subscription');
-
-const { asyncHandler } = require('../middleware/errorMiddleware');
-
-const { getPagination, formatPaginationResponse } = require('../utils/helpers');
-
-const { sendDistributorVerificationEmail, sendDriverApprovalEmail } = require('../utils/emailService');
-
-const csv = require('csv-parser');
-
-const fs = require('fs');
-
-
-
-/**
-
- * Get dashboard statistics
-
- * @route GET /api/admin/dashboard
-
- * @access Private (Super Admin)
-
- */
-
-const getDashboardStats = asyncHandler(async (req, res) => {
-
-  const [
-
-    totalUsers,
-
-    totalDistributors,
-
-    totalStores,
-
-    totalProducts,
-
-    totalOrders,
-
-    totalDrivers,
-
-    activeStores,
-
-    pendingVerifications,
-
-  ] = await Promise.all([
-
-    User.countDocuments(),
-
-    User.countDocuments({ role: { $in: ['distributor', 'storeOwner'] } }),
-
-    Store.countDocuments(),
-
-    Product.countDocuments(),
-
-    Order.countDocuments(),
-
-    Driver.countDocuments(),
-
-    Store.countDocuments({ isActive: true, subscriptionStatus: 'active' }),
-
-    User.countDocuments({ verificationStatus: 'pending', role: { $in: ['distributor', 'storeOwner'] } }),
-
-  ]);
-
-
-
-  const revenueStats = await Order.aggregate([
-
-    { $match: { paymentStatus: 'paid' } },
-
-    {
-
-      $group: {
-
-        _id: null,
-
-        totalRevenue: { $sum: '$total' },
-
-        totalDeliveryFees: { $sum: '$deliveryFee' },
-
-      },
-
-    },
-
-  ]);
-
-
-
-  const recentOrders = await Order.find()
-
-    .sort({ createdAt: -1 })
-
-    .limit(10)
-
-    .populate('customerId', 'name email')
-
-    .populate('storeId', 'name');
-
-
-
-  res.json({
-
-    success: true,
-
-    data: {
-
-      statistics: {
-
-        totalUsers,
-
-        totalDistributors,
-
-        totalStores,
-
-        totalProducts,
-
-        totalOrders,
-
-        totalDrivers,
-
-        activeStores,
-
-        pendingVerifications,
-
-        totalRevenue: revenueStats[0]?.totalRevenue || 0,
-
-        totalDeliveryFees: revenueStats[0]?.totalDeliveryFees || 0,
-
-      },
-
-      recentOrders,
-
-    },
-
-  });
-
-});
-
-
-
-/**
-
- * Get all users with filters
-
- * @route GET /api/admin/users
-
- * @access Private (Super Admin)
-
- */
-
-const getAllUsers = asyncHandler(async (req, res) => {
-
-  const { page, limit, role, verificationStatus, search } = req.query;
-
-  const { skip, limit: pageLimit, page: pageNum } = getPagination(page, limit);
-
-
-
-  const query = {};
-
-
-
-  if (role) query.role = role;
-
-  if (verificationStatus) query.verificationStatus = verificationStatus;
-
-  if (search) {
-
-    query.$or = [
-
-      { name: { $regex: search, $options: 'i' } },
-
-      { email: { $regex: search, $options: 'i' } },
-
-      { phone: { $regex: search, $options: 'i' } },
-
-    ];
-
-  }
-
-
-
-  const [users, total] = await Promise.all([
-
-    User.find(query)
-
-      .skip(skip)
-
-      .limit(pageLimit)
-
-      .sort({ createdAt: -1 }),
-
-    User.countDocuments(query),
-
-  ]);
-
-
-
-  res.json({
-
-    success: true,
-
-    ...formatPaginationResponse(users, total, pageNum, pageLimit),
-
-  });
-
-});
-
-
-
-/**
-
- * Get single user details
-
- * @route GET /api/admin/users/:id
-
- * @access Private (Super Admin)
-
- */
-
-const getUserDetails = asyncHandler(async (req, res) => {
-
-  const user = await User.findById(req.params.id);
-
-
-
-  if (!user) {
-
-    return res.status(404).json({
-
-      success: false,
-
-      message: 'User not found',
-
-    });
-
-  }
-
-
-
-  let additionalData = {};
-
-
-
-  if (user.role === 'driver') {
-
-    additionalData.driverProfile = await Driver.findByUserId(user._id);
-
-  }
-
-
-
-  if (user.role === 'storeOwner' || user.role === 'distributor') {
-
-    additionalData.stores = await Store.findByDistributor(user._id);
-
-    additionalData.orders = await Order.find({ customerId: user._id })
-
-      .sort({ createdAt: -1 })
-
-      .limit(10);
-
-  }
-
-
-
-  res.json({
-
-    success: true,
-
-    data: {
-
-      user,
-
-      ...additionalData,
-
-    },
-
-  });
-
-});
-
-
-
-/**
-
- * Verify/Reject distributor or store owner
-
- * @route PUT /api/admin/distributors/:id/verify
-
- * @access Private (Super Admin)
-
- */
-
-const verifyDistributor = asyncHandler(async (req, res) => {
-
-  const { status, reason } = req.body;
-
 
 
   const user = await User.findById(req.params.id);
@@ -594,8 +343,6 @@ const verifyDistributor = asyncHandler(async (req, res) => {
 
 
   user.verificationStatus = status;
-
-
 
   if (status === 'rejected' && reason) {
 
@@ -1097,7 +844,7 @@ const getAllDrivers = asyncHandler(async (req, res) => {
 
 const approveDriver = asyncHandler(async (req, res) => {
 
-  const { status, reason } = req.body;
+  const { status, reason } = req.body; // status: 'approved' or 'rejected'
 
 
 
