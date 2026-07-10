@@ -22,10 +22,8 @@ try {
 // Connect to database
 connectDB();
 
-// Add this after connectDB()
+// Start scheduled tasks (production only)
 const { startScheduledTasks } = require('./jobs/scheduledTasks');
-
-// Start scheduled tasks in production
 if (config.nodeEnv === 'production') {
   startScheduledTasks();
 }
