@@ -5,7 +5,7 @@ const { validationResult, body, param, query } = require('express-validator');
  */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
-  
+
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
@@ -17,12 +17,14 @@ const handleValidationErrors = (req, res, next) => {
       })),
     });
   }
-  
+
   next();
 };
 
 /**
  * Validation rules for user registration
+ * - Allow storeOwner, distributor, driver, customer, superAdmin (if needed)
+ * - Require distributorCode for storeOwner/distributor
  */
 const validateRegistration = [
   body('email')
@@ -42,13 +44,15 @@ const validateRegistration = [
     .matches(/^[0-9+\-\s()]+$/)
     .withMessage('Invalid phone number format'),
   body('role')
-    .isIn(['customer', 'distributor', 'driver'])
+    .isIn(['customer', 'distributor', 'driver', 'storeOwner'])
     .withMessage('Invalid role'),
   body('distributorCode')
-    .if(body('role').equals('distributor'))
+    .if(
+      body('role').custom(value => value === 'distributor' || value === 'storeOwner')
+    )
     .trim()
     .notEmpty()
-    .withMessage('Distributor code is required for distributor registration'),
+    .withMessage('Distributor code is required for store owner/distributor registration'),
   handleValidationErrors,
 ];
 
@@ -159,7 +163,7 @@ const validateAppointmentBooking = [
       const appointmentDate = new Date(value);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (appointmentDate < today) {
         throw new Error('Appointment date cannot be in the past');
       }
