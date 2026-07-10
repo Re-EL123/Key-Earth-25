@@ -13,6 +13,15 @@ const { asyncHandler } = require('../middleware/errorMiddleware');
 const register = asyncHandler(async (req, res) => {
   const { email, password, name, phone, role, distributorCode, ...otherData } = req.body;
 
+  // Basic role validation: allow storeOwner, distributor, driver, customer, superAdmin
+  const validRoles = ['superAdmin', 'storeOwner', 'distributor', 'customer', 'driver'];
+  if (!role || !validRoles.includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid role',
+    });
+  }
+
   // Check if user already exists
   const existingUser = await User.findByEmail(email);
   if (existingUser) {
@@ -22,12 +31,13 @@ const register = asyncHandler(async (req, res) => {
     });
   }
 
-  // Validate distributor code if role is distributor
-  if (role === 'distributor') {
+  // Validate distributor code if role is storeOwner or distributor
+  // (you treat store owners as distributors with portal access)
+  if (role === 'storeOwner' || role === 'distributor') {
     if (!distributorCode) {
       return res.status(400).json({
         success: false,
-        message: 'Distributor code is required for distributor registration',
+        message: 'Distributor code is required for store owner/distributor registration',
       });
     }
 
@@ -63,17 +73,19 @@ const register = asyncHandler(async (req, res) => {
       name,
       phone,
       role,
-      verificationStatus: role === 'distributor' ? 'pending' : 'verified',
+      // Store owners and distributors start as pending, others as verified
+      verificationStatus:
+        role === 'storeOwner' || role === 'distributor' ? 'pending' : 'verified',
     };
 
-    if (role === 'distributor') {
+    if (role === 'storeOwner' || role === 'distributor') {
       userData.distributorCode = distributorCode;
     }
 
     const user = await User.create(userData);
 
-    // Mark distributor code as used
-    if (role === 'distributor') {
+    // Mark distributor code as used for storeOwner/distributor
+    if (role === 'storeOwner' || role === 'distributor') {
       const code = await DistributorCode.findByCode(distributorCode);
       await code.markAsUsed(user._id);
     }
@@ -109,6 +121,21 @@ const register = asyncHandler(async (req, res) => {
     if (error.firebaseUid) {
       await deleteFirebaseUser(error.firebaseUid);
     }
+
+    // If this is a Mongoose validation error, surface details
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors || {}).map((err) => ({
+        field: err.path,
+        message: err.message,
+      }));
+
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
     throw error;
   }
 });
@@ -129,6 +156,7 @@ const getMe = asyncHandler(async (req, res) => {
     additionalData.driverProfile = driver;
   }
 
+  // Store owners and distributors can have stores
   if (user.role === 'storeOwner' || user.role === 'distributor') {
     const Store = require('../models/Store');
     const stores = await Store.findByDistributor(user._id);
