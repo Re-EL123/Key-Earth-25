@@ -68,9 +68,11 @@ const allowedOrigins = [
 
   // GitHub Codespaces / GitHub Pages / other external frontends
 
-  'https://stunning-garbanzo-69g6wxx54qp4h6qj-3000.app.github.dev',
-  'https://stunning-garbanzo-69g6wxx54qp4h6qj-3001.app.github.dev',
-  'https://stunning-garbanzo-69g6wxx54qp4h6qj-3002.app.github.dev',
+  'https://bug-free-spork-g4q96vvr7g9v39wr7-3000.app.github.dev',
+  'https://bug-free-spork-g4q96vvr7g9v39wr7-3001.app.github.dev',
+  'https://bug-free-spork-g4q96vvr7g9v39wr7-3002.app.github.dev',
+  'https://bug-free-spork-g4q96vvr7g9v39wr7-8081.app.github.dev',
+  'https://crispy-space-enigma-v6v4wjjrqxw9hxr44-3002.app.github.dev',
 
 
 

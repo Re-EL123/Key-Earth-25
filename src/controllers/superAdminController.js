@@ -35,7 +35,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     Order.countDocuments(),
     Driver.countDocuments(),
     Store.countDocuments({ isActive: true, subscriptionStatus: 'active' }),
-    User.countDocuments({ verificationStatus: 'pending', role: 'distributor' }),
+    User.countDocuments({ verificationStatus: 'pending', role: 'storeOwner' }),
   ]);
 
   // Revenue statistics
