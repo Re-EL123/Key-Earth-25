@@ -167,7 +167,7 @@ const verifyDistributor = asyncHandler(async (req, res) => {
     });
   }
 
-  if (user.role !== 'distributor' || 'storeOwner') {
+  if(user.role === 'storeOwner' || user.role === 'distributor') {
     return res.status(400).json({
       success: false,
       message: 'User is not a distributor/store owner',
